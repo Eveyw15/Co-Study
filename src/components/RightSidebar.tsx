@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, RotateCcw, Plus, StopCircle, Trees, GripHorizontal, ChevronRight } from 'lucide-react';
 import { Language, Tag as TagType, TimerMode, Tree } from '../types';
@@ -12,16 +14,19 @@ interface RightSidebarProps {
   onStudyMinutesIncrement?: (minutes: number) => void;
 }
 
-const SOUND_EFFECTS = {
-  notification: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-positive-notification-951.mp3'),
-  start: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3'),
-  switch: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-click-melodic-tone-1129.mp3')
-};
+/**
+ * IMPORTANT (Next.js SSR):
+ * Do NOT create `new Audio()` at module top-level.
+ * It will run during SSR and crash with "Audio is not defined".
+ * We only create Audio objects inside `useEffect` (browser only).
+ */
+type SoundKey = 'notification' | 'start' | 'switch';
 
-Object.values(SOUND_EFFECTS).forEach(audio => {
-  audio.load();
-  audio.volume = 0.5;
-});
+const SOUND_EFFECT_URLS: Record<SoundKey, string> = {
+  notification: '/sfx/notification.wav',
+  start: '/sfx/select.wav',
+  switch: '/sfx/switch.wav'
+};
 
 const STOPWATCH_LIMIT_MINUTES = 120;
 const STOPWATCH_LIMIT_SECONDS = STOPWATCH_LIMIT_MINUTES * 60;
@@ -29,7 +34,7 @@ const TREE_BLOCK_MINUTES = 25;
 
 // Random Morandi Colors Palette
 const MORANDI_COLORS = [
-  '#E0E5DF', '#D2D0C8', '#C6C0B5', '#B8B3AC', '#A4A099', 
+  '#E0E5DF', '#D2D0C8', '#C6C0B5', '#B8B3AC', '#A4A099',
   '#C9C0D3', '#B8C6D9', '#A8C0C0', '#CAD3C8', '#D8E0D8',
   '#E6DCD3', '#D3C6BC', '#C0B3A8', '#E6C6C6', '#D9B3B3',
   '#B4C6D0', '#A8B0C0', '#C3B8D8', '#D8C3C3', '#E0D8C3'
@@ -37,8 +42,46 @@ const MORANDI_COLORS = [
 
 const getRandomMorandi = () => MORANDI_COLORS[Math.floor(Math.random() * MORANDI_COLORS.length)];
 
-const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, toggleSidebar, lang, onStatusChange, onStudyMinutesIncrement }) => {
+const RightSidebar: React.FC<RightSidebarProps> = ({
+  isOpen,
+  toggleSidebar,
+  lang,
+  onStatusChange,
+  onStudyMinutesIncrement
+}) => {
   const t = TRANSLATIONS[lang];
+
+  // ---- Audio (browser-only) ----
+  const audioRef = useRef<Partial<Record<SoundKey, HTMLAudioElement>>>({});
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const makeAudio = (url: string) => {
+      const a = new Audio(url);
+      a.load();
+      a.volume = 0.5;
+      return a;
+    };
+
+    audioRef.current = {
+      notification: makeAudio(SOUND_EFFECT_URLS.notification),
+      start: makeAudio(SOUND_EFFECT_URLS.start),
+      switch: makeAudio(SOUND_EFFECT_URLS.switch)
+    };
+  }, []);
+
+  const playSound = (key: SoundKey) => {
+    const audio = audioRef.current[key];
+    if (!audio) return;
+
+    try {
+      audio.currentTime = 0;
+      void audio.play().catch((e) => console.warn('Audio play prevented:', e));
+    } catch (e) {
+      console.warn('Audio play failed:', e);
+    }
+  };
 
   // Timer State
   const [mode, setMode] = useState<TimerMode>('focus');
@@ -48,8 +91,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, toggleSidebar, lang
   const [stopwatchTime, setStopwatchTime] = useState(0);
 
   // Data State
-  // Initialize default tags with random Morandi colors
-  const [tags, setTags] = useState<TagType[]>(() => 
+  const [tags, setTags] = useState<TagType[]>(() =>
     DEFAULT_TAGS.map(tag => ({ ...tag, color: getRandomMorandi() }))
   );
   const [selectedTag, setSelectedTag] = useState<string>(DEFAULT_TAGS[0].id);
@@ -59,26 +101,18 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, toggleSidebar, lang
   const [showForest, setShowForest] = useState(false);
 
   // Drag State for Mini Timer
-  // In Next.js, components can be rendered on the server first.
-  // Avoid touching `window` during initial render.
   const [timerPos, setTimerPos] = useState({ x: 0, y: 100 });
   const isDragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    // Set default floating position after mount
+    if (typeof window === 'undefined') return;
     setTimerPos({ x: Math.max(0, window.innerWidth - 150), y: 100 });
   }, []);
 
   // Refs for stable callbacks to prevent Interval resetting
   const onStatusChangeRef = useRef(onStatusChange);
   useEffect(() => { onStatusChangeRef.current = onStatusChange; }, [onStatusChange]);
-
-  const playSound = (key: keyof typeof SOUND_EFFECTS) => {
-    const audio = SOUND_EFFECTS[key];
-    audio.currentTime = 0;
-    audio.play().catch(e => console.warn("Audio play prevented:", e));
-  };
 
   const recordTime = useCallback((minutes: number) => {
     const tag = tags.find(t => t.id === selectedTag);
@@ -92,7 +126,6 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, toggleSidebar, lang
       });
     }
 
-    // Also update per-user leaderboard minutes (shared to other side via App/socket).
     onStudyMinutesIncrement?.(minutes);
   }, [tags, selectedTag, onStudyMinutesIncrement]);
 
@@ -432,14 +465,19 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, toggleSidebar, lang
                     onClick={() => setSelectedTag(tag.id)}
                     style={{ backgroundColor: tag.color }}
                     className={`px-4 py-1.5 rounded-full text-xs font-bold text-gray-800 transition-all border-2 ${
-                      selectedTag === tag.id 
-                      ? 'border-black/50 dark:border-white/50 scale-105 shadow-md' 
+                      selectedTag === tag.id
+                      ? 'border-black/50 dark:border-white/50 scale-105 shadow-md'
                       : 'border-transparent hover:brightness-95'
                     }`}
                   >
                     {tag.name}
                     {selectedTag === tag.id && (
-                      <span onClick={(e) => { e.stopPropagation(); handleDeleteTag(tag.id); }} className="ml-2 text-gray-600 hover:text-red-500">×</span>
+                      <span
+                        onClick={(e) => { e.stopPropagation(); handleDeleteTag(tag.id); }}
+                        className="ml-2 text-gray-600 hover:text-red-500"
+                      >
+                        ×
+                      </span>
                     )}
                   </button>
                 ))}

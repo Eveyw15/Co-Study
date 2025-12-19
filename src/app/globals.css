@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Global styles ported from the original Vite index.html */
 
 /* Custom scrollbar (webkit) */
