@@ -23,14 +23,14 @@ const App: React.FC = () => {
 
   // Current User State
   const [currentUser, setCurrentUser] = useState<User>({
-    id: 'me',
-    name: 'Me',
+    id: "",
+    name: "",
     avatar: 'https://picsum.photos/100/100?random=99',
     isSelf: true,
-    isMicOn: false,
+    isMicOn: true,
     isCamOn: false,
-    status: 'idle',
-    studyTimeMinutes: 0
+    status: "idle",
+    studyTimeMinutes: 0,
   });
 
   // Apply Theme
@@ -115,14 +115,17 @@ const App: React.FC = () => {
 
     // Enter room
     setCurrentUser(prev => ({
-      ...prev,
-      id: socket.id,
-      name,
-      avatar,
-      isSelf: true,
-    }));
-    setRoomName(roomId);
-    setIsInRoom(true);
+    ...prev,
+    id: socket.id ?? prev.id,
+    name,
+    avatar: prev.avatar,
+    isSelf: true,
+    isMicOn: prev.isMicOn,
+    isCamOn: prev.isCamOn,
+    status: prev.status,
+    studyTimeMinutes: prev.studyTimeMinutes,
+  }));
+
 
     // Push initial self state
     socket.emit('user:update', {
