@@ -1,13 +1,7 @@
-import { createServer } from 'http';
-import next from 'next';
-import { Server as IOServer } from 'socket.io';
-import { parse } from 'url';
+import { createServer } from "http";
+import { Server as IOServer } from "socket.io";
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
-const dev = process.env.NODE_ENV !== 'production';
-
-const nextApp = next({ dev, hostname: '0.0.0.0', port: PORT });
-const handle = nextApp.getRequestHandler();
+const PORT = process.env.SOCKET_PORT ? Number(process.env.SOCKET_PORT) : 3001;
 
 /**
  * In-memory room store (1:1 rooms).
@@ -19,7 +13,7 @@ function emitUsers(io, roomId) {
   const room = rooms.get(roomId);
   if (!room) return;
   const users = Array.from(room.members.values());
-  io.to(roomId).emit('room:users', users);
+  io.to(roomId).emit("room:users", users);
 }
 
 function removeFromAllRooms(io, socketId) {
@@ -32,28 +26,20 @@ function removeFromAllRooms(io, socketId) {
   }
 }
 
-await nextApp.prepare();
-
 const server = createServer((req, res) => {
-  const parsedUrl = parse(req.url || '/', true);
-  handle(req, res, parsedUrl);
+  res.writeHead(200);
+  res.end("ok");
 });
 
 const io = new IOServer(server, {
   cors: { origin: true, credentials: true },
 });
 
-io.on('connection', (socket) => {
-  socket.on('room:create', ({ roomId, password, user }, ack) => {
+io.on("connection", (socket) => {
+  socket.on("room:create", ({ roomId, password, user }, ack) => {
     try {
-      if (!roomId || !password || !user?.name) {
-        ack?.({ ok: false, errorKey: 'loginError' });
-        return;
-      }
-      if (rooms.has(roomId)) {
-        ack?.({ ok: false, errorKey: 'roomExists' });
-        return;
-      }
+      if (!roomId || !password || !user?.name) return ack?.({ ok: false, errorKey: "loginError" });
+      if (rooms.has(roomId)) return ack?.({ ok: false, errorKey: "roomExists" });
 
       const members = new Map();
       members.set(socket.id, {
@@ -62,7 +48,7 @@ io.on('connection', (socket) => {
         avatar: user.avatar || `https://picsum.photos/100/100?random=${Math.floor(Math.random() * 1000)}`,
         isMicOn: false,
         isCamOn: false,
-        status: 'idle',
+        status: "idle",
         studyTimeMinutes: 0,
       });
 
@@ -72,33 +58,24 @@ io.on('connection', (socket) => {
       emitUsers(io, roomId);
     } catch (e) {
       console.error(e);
-      ack?.({ ok: false, errorKey: 'loginError' });
+      ack?.({ ok: false, errorKey: "loginError" });
     }
   });
 
-  socket.on('room:join', ({ roomId, password, user }, ack) => {
+  socket.on("room:join", ({ roomId, password, user }, ack) => {
     try {
       const room = rooms.get(roomId);
-      if (!room) {
-        ack?.({ ok: false, errorKey: 'roomNotFound' });
-        return;
-      }
-      if (room.password !== password) {
-        ack?.({ ok: false, errorKey: 'loginError' });
-        return;
-      }
-      if (room.members.size >= 2) {
-        ack?.({ ok: false, errorKey: 'roomFull' });
-        return;
-      }
+      if (!room) return ack?.({ ok: false, errorKey: "roomNotFound" });
+      if (room.password !== password) return ack?.({ ok: false, errorKey: "loginError" });
+      if (room.members.size >= 2) return ack?.({ ok: false, errorKey: "roomFull" });
 
       room.members.set(socket.id, {
         id: socket.id,
-        name: String(user?.name || 'Guest').slice(0, 32),
+        name: String(user?.name || "Guest").slice(0, 32),
         avatar: user?.avatar || `https://picsum.photos/100/100?random=${Math.floor(Math.random() * 1000)}`,
         isMicOn: false,
         isCamOn: false,
-        status: 'idle',
+        status: "idle",
         studyTimeMinutes: 0,
       });
 
@@ -107,11 +84,11 @@ io.on('connection', (socket) => {
       emitUsers(io, roomId);
     } catch (e) {
       console.error(e);
-      ack?.({ ok: false, errorKey: 'loginError' });
+      ack?.({ ok: false, errorKey: "loginError" });
     }
   });
 
-  socket.on('room:leave', ({ roomId }) => {
+  socket.on("room:leave", ({ roomId }) => {
     const room = rooms.get(roomId);
     if (!room) return;
     room.members.delete(socket.id);
@@ -120,7 +97,7 @@ io.on('connection', (socket) => {
     else emitUsers(io, roomId);
   });
 
-  socket.on('user:update', ({ roomId, patch }) => {
+  socket.on("user:update", ({ roomId, patch }) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const user = room.members.get(socket.id);
@@ -128,38 +105,36 @@ io.on('connection', (socket) => {
 
     const next = {
       ...user,
-      isMicOn: typeof patch?.isMicOn === 'boolean' ? patch.isMicOn : user.isMicOn,
-      isCamOn: typeof patch?.isCamOn === 'boolean' ? patch.isCamOn : user.isCamOn,
-      status: patch?.status === 'focus' || patch?.status === 'break' || patch?.status === 'idle' ? patch.status : user.status,
+      isMicOn: typeof patch?.isMicOn === "boolean" ? patch.isMicOn : user.isMicOn,
+      isCamOn: typeof patch?.isCamOn === "boolean" ? patch.isCamOn : user.isCamOn,
+      status: patch?.status === "focus" || patch?.status === "break" || patch?.status === "idle" ? patch.status : user.status,
       studyTimeMinutes: Number.isFinite(patch?.studyTimeMinutes) ? Math.max(0, Math.floor(patch.studyTimeMinutes)) : user.studyTimeMinutes,
-      name: typeof patch?.name === 'string' ? String(patch.name).slice(0, 32) : user.name,
-      avatar: typeof patch?.avatar === 'string' ? String(patch.avatar) : user.avatar,
+      name: typeof patch?.name === "string" ? String(patch.name).slice(0, 32) : user.name,
+      avatar: typeof patch?.avatar === "string" ? String(patch.avatar) : user.avatar,
     };
 
     room.members.set(socket.id, next);
     emitUsers(io, roomId);
   });
 
-  socket.on('chat:send', ({ roomId, message }) => {
+  socket.on("chat:send", ({ roomId, message }) => {
     const room = rooms.get(roomId);
     if (!room) return;
     if (!room.members.has(socket.id)) return;
-    io.to(roomId).emit('chat:message', message);
+    io.to(roomId).emit("chat:message", message);
   });
 
-  socket.on('webrtc:signal', ({ roomId, to, data }) => {
+  socket.on("webrtc:signal", ({ roomId, to, data }) => {
     const room = rooms.get(roomId);
     if (!room) return;
     if (!room.members.has(socket.id)) return;
     if (!room.members.has(to)) return;
-    io.to(to).emit('webrtc:signal', { from: socket.id, data });
+    io.to(to).emit("webrtc:signal", { from: socket.id, data });
   });
 
-  socket.on('disconnect', () => {
-    removeFromAllRooms(io, socket.id);
-  });
+  socket.on("disconnect", () => removeFromAllRooms(io, socket.id));
 });
 
-server.listen(PORT, () => {
-  console.log(`FocusFlow Next.js server running on http://localhost:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Socket.IO server running on http://localhost:${PORT}`);
 });

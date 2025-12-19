@@ -43,10 +43,7 @@ const App: React.FC = () => {
   }, [theme]);
 
   const serverUrl = useMemo(() => {
-    // Next.js client env vars must be prefixed with NEXT_PUBLIC_*
-    // If you run the custom Next.js server (included), Socket.IO runs on the same origin.
-    // In that case, you can leave NEXT_PUBLIC_SERVER_URL empty.
-    return (process.env.NEXT_PUBLIC_SERVER_URL || '').trim();
+    return (process.env.NEXT_PUBLIC_SOCKET_URL || '').trim();
   }, []);
 
   const detachSocket = () => {
@@ -69,8 +66,9 @@ const App: React.FC = () => {
 
     const avatar = `https://picsum.photos/100/100?random=${Math.floor(Math.random() * 1000)}`;
     const socket = io(serverUrl || undefined, {
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       autoConnect: true,
+      withCredentials: true,
     });
     socketRef.current = socket;
 
@@ -113,12 +111,15 @@ const App: React.FC = () => {
       return { ok: false, errorKey: result?.errorKey || 'loginError' };
     }
 
+    setRoomName(roomId);
+    setIsInRoom(true);
+
     // Enter room
     setCurrentUser(prev => ({
     ...prev,
     id: socket.id ?? prev.id,
     name,
-    avatar: prev.avatar,
+    avatar,
     isSelf: true,
     isMicOn: prev.isMicOn,
     isCamOn: prev.isCamOn,
