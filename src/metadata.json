@@ -1,0 +1,8 @@
+{
+  "name": "FocusFlow - Collaborative Study Space",
+  "description": "A premium, Apple-style collaborative study platform combining video conferencing, Pomodoro timer, and AI assistance.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
