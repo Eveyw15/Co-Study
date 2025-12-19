@@ -33,6 +33,10 @@ const App: React.FC = () => {
     studyTimeMinutes: 0,
   });
 
+  useEffect(() => {
+    console.log('NEXT_PUBLIC_SOCKET_URL =', process.env.NEXT_PUBLIC_SOCKET_URL);
+  }, []);
+
   // Apply Theme
   useEffect(() => {
     if (theme === 'dark') {
@@ -68,7 +72,6 @@ const App: React.FC = () => {
     const socket = io(serverUrl || undefined, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
-      withCredentials: true,
     });
     socketRef.current = socket;
 
